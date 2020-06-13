@@ -65,12 +65,12 @@ public:
   VkRenderPass                    gl_VkRenderPass;
 
   VkDescriptorSetLayout           gl_VkDescSetLayoutTexture;
-  VkPipelineLayout                gl_VkPipelineLayout;
+  VkPipelineLayout                gl_VkPipelineLayouts[SVK_SHADER_MODULE_COUNT];
   VkPipelineLayout                gl_VkPipelineLayoutOcclusion;
 
   VkShaderModule                  gl_VkShaderModuleVert;
-  VkShaderModule                  gl_VkShaderModuleFrag;
-  VkShaderModule                  gl_VkShaderModuleFragAlpha;
+  VkShaderModule                  gl_VkShaderModulesFrag[SVK_SHADER_MODULE_COUNT];
+  VkShaderModule                  gl_VkShaderModulesFragAlpha[SVK_SHADER_MODULE_COUNT];
   VkShaderModule                  gl_VkShaderModuleVertOcclusion;
   VkShaderModule                  gl_VkShaderModuleFragOcclusion;
 
@@ -172,10 +172,10 @@ public:
   void DestroyDescriptorPools();
   void PrepareDescriptorSets(uint32_t cmdBufferIndex);
 
-  SvkPipelineState &GetPipeline(SvkPipelineStateFlags flags);
+  SvkPipelineState &GetPipeline(SvkPipelineStateFlags flags, uint32_t textureCount);
   // create new pipeline and add it to list
   SvkPipelineState &CreatePipeline(SvkPipelineStateFlags flags, const SvkVertexLayout &vertLayout,
-    VkShaderModule vertShader, VkShaderModule fragShader);
+    VkShaderModule vertShader, VkShaderModule fragShader, uint32_t textureCount);
   void CreatePipelineCache();
   void DestroyPipelines();
 

@@ -52,6 +52,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #define SVK_OCCLUSION_QUERIES_MAX               256
 
+#define SVK_SHADER_MODULE_COUNT                 5
+
 struct SvkTextureObject
 {
 public:
@@ -114,6 +116,7 @@ struct SvkPipelineState
 {
   SvkPipelineStateFlags   sps_Flags;
   VkPipeline              sps_Pipeline;
+  uint32_t                sps_TextureCount;
 };
 
 struct SvkSamplerObject

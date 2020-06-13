@@ -23,21 +23,23 @@ SvkPipelineStateFlags &SvkMain::GetPipelineState()
   return gl_VkGlobalState;
 }
 
-SvkPipelineState &SvkMain::GetPipeline(SvkPipelineStateFlags flags)
+SvkPipelineState &SvkMain::GetPipeline(SvkPipelineStateFlags flags, uint32_t textureCount)
 {
   for (INDEX i = 0; i < gl_VkPipelines.Count(); i++)
   {
-    if (gl_VkPipelines[i].sps_Flags == flags)
+    if (gl_VkPipelines[i].sps_Flags == flags && gl_VkPipelines[i].sps_TextureCount == textureCount)
     {
       return gl_VkPipelines[i];
     }
   }
 
   VkShaderModule vert = gl_VkShaderModuleVert;
-  VkShaderModule frag = (flags & SVK_PLS_ALPHA_ENABLE_BOOL) ? gl_VkShaderModuleFragAlpha : gl_VkShaderModuleFrag;
+  VkShaderModule frag = (flags & SVK_PLS_ALPHA_ENABLE_BOOL) ? 
+    gl_VkShaderModulesFragAlpha[textureCount] :
+    gl_VkShaderModulesFrag[textureCount];
 
   // if not found, create new pipeline with specified flags
-  return CreatePipeline(flags, *gl_VkDefaultVertexLayout, vert, frag);
+  return CreatePipeline(flags, *gl_VkDefaultVertexLayout, vert, frag, textureCount);
 }
 
 void SvkMain::DestroyPipelines()
@@ -52,17 +54,19 @@ void SvkMain::DestroyPipelines()
 
 SvkPipelineState &SvkMain::CreatePipeline(
   SvkPipelineStateFlags flags, const SvkVertexLayout &vertLayout,
-  VkShaderModule vertShaderModule, VkShaderModule fragShaderModule)
+  VkShaderModule vertShaderModule, VkShaderModule fragShaderModule, uint32_t textureCount)
 {
+  VkPipelineLayout pipelineLayout = gl_VkPipelineLayouts[textureCount];
+
   SvkPipelineState &newState = gl_VkPipelines.Push();
   newState.sps_Flags = flags;
+  newState.sps_TextureCount = textureCount;
 
   // if dynamic depth bounds required, dynamicStatesCount will be incremented
   uint32_t dynamicStatesCount = 2;
   VkDynamicState dynamicStates[3] = {
     VK_DYNAMIC_STATE_VIEWPORT,
     VK_DYNAMIC_STATE_SCISSOR,
-    VK_DYNAMIC_STATE_DEPTH_BOUNDS
   };
 
   VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
@@ -150,16 +154,6 @@ SvkPipelineState &SvkMain::CreatePipeline(
     // depth writes are always disabled when depthTestEnable is VK_FALSE,
     // so depthTestEnable must be VK_TRUE
     depthStencil.depthTestEnable = VK_TRUE;
-  }
-
-  if (false) // (flags & SVK_PLS_DEPTH_BOUNDS_BOOL)
-  {
-    depthStencil.depthBoundsTestEnable = VK_TRUE;
-    dynamicStatesCount++;
-  }
-  else
-  {
-    depthStencil.depthBoundsTestEnable = VK_FALSE;
   }
 
   switch (flags & SVK_PLS_DEPTH_COMPARE_OP_BITS)
@@ -251,7 +245,7 @@ SvkPipelineState &SvkMain::CreatePipeline(
   pipelineInfo.pDepthStencilState = &depthStencil;
   pipelineInfo.pColorBlendState = &colorBlending;
   pipelineInfo.pDynamicState = &dynamicInfo;
-  pipelineInfo.layout = gl_VkPipelineLayout;
+  pipelineInfo.layout = pipelineLayout;
   pipelineInfo.renderPass = gl_VkRenderPass;
   pipelineInfo.subpass = 0;
   pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;

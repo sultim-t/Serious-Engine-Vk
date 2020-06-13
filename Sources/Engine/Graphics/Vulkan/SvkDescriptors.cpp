@@ -61,13 +61,17 @@ void SvkMain::CreateDescriptorSetLayouts()
   // create default layout
   VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutInfo.setLayoutCount = 4;
   pipelineLayoutInfo.pSetLayouts = setLayouts;
   pipelineLayoutInfo.pushConstantRangeCount = pushConstCount;
   pipelineLayoutInfo.pPushConstantRanges = pushConsts;
 
-  r = vkCreatePipelineLayout(gl_VkDevice, &pipelineLayoutInfo, nullptr, &gl_VkPipelineLayout);
-  VK_CHECKERROR(r);
+  for (uint32_t i = 0; i < SVK_SHADER_MODULE_COUNT; i++)
+  {
+    pipelineLayoutInfo.setLayoutCount = i;
+
+    r = vkCreatePipelineLayout(gl_VkDevice, &pipelineLayoutInfo, nullptr, &gl_VkPipelineLayouts[i]);
+    VK_CHECKERROR(r);
+  }
 
   // create layout for occlusion quiries
   VkPipelineLayoutCreateInfo pipelineLayoutOcclInfo = {};
@@ -80,10 +84,14 @@ void SvkMain::CreateDescriptorSetLayouts()
 void SvkMain::DestroyDescriptorSetLayouts()
 {
   ASSERT(gl_VkDescSetLayoutTexture != VK_NULL_HANDLE);
-  ASSERT(gl_VkPipelineLayout != VK_NULL_HANDLE);
-
   vkDestroyDescriptorSetLayout(gl_VkDevice, gl_VkDescSetLayoutTexture, nullptr);
-  vkDestroyPipelineLayout(gl_VkDevice, gl_VkPipelineLayout, nullptr);
+
+  for (uint32_t i = 0; i < SVK_SHADER_MODULE_COUNT; i++)
+  {
+    ASSERT(gl_VkPipelineLayouts[i] != VK_NULL_HANDLE);
+    vkDestroyPipelineLayout(gl_VkDevice, gl_VkPipelineLayouts[i], nullptr);
+  }
+
   vkDestroyPipelineLayout(gl_VkDevice, gl_VkPipelineLayoutOcclusion, nullptr);
 }
 

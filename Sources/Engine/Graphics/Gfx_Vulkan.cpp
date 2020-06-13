@@ -37,8 +37,6 @@ FLOAT	VkViewMatrix[16];
 // fog/haze textures
 extern ULONG _fog_ulTexture;
 extern ULONG _haze_ulTexture;
-static uint32_t _no_ulTexture;
-static uint64_t _no_ulTextureDescSet;
 
 extern BOOL GFX_abTexture[GFX_MAXTEXUNITS];
 
@@ -318,16 +316,20 @@ void SvkMain::Reset_Vulkan()
   gl_VkCmdIsRecording = false;
 
   gl_VkDescSetLayoutTexture = VK_NULL_HANDLE;
-  gl_VkPipelineLayout = VK_NULL_HANDLE;
   gl_VkPipelineLayoutOcclusion = VK_NULL_HANDLE;
   gl_VkPipelineCache = VK_NULL_HANDLE;
   gl_VkDefaultVertexLayout = nullptr;
   gl_VkShaderModuleVert = VK_NULL_HANDLE;
-  gl_VkShaderModuleFrag = VK_NULL_HANDLE;
-  gl_VkShaderModuleFragAlpha = VK_NULL_HANDLE;
   gl_VkShaderModuleVertOcclusion = VK_NULL_HANDLE;
   gl_VkShaderModuleFragOcclusion = VK_NULL_HANDLE;
   gl_VkPreviousPipeline = nullptr;
+
+  for (uint32_t i = 0; i < SVK_SHADER_MODULE_COUNT; i++)
+  {
+    gl_VkShaderModulesFrag[i] = VK_NULL_HANDLE;
+    gl_VkShaderModulesFragAlpha[i] = VK_NULL_HANDLE;
+    gl_VkPipelineLayouts[i] = VK_NULL_HANDLE;
+  }
 
   // reset states to default
   gl_VkGlobalState = SVK_PLS_DEFAULT_FLAGS;
@@ -453,8 +455,6 @@ void SvkMain::InitContext_Vulkan()
 
   uint32_t noTexturePixels[] = { 0xFFFFFFFF, 0xFFFFFFFF };
   VkExtent2D noTextureSize = { 1, 1 };
-  _no_ulTexture = CreateTexture();
-  InitTexture32Bit(_no_ulTexture, VK_FORMAT_R8G8B8A8_UNORM, noTexturePixels, &noTextureSize, 1, false);
 
   // prepare pattern texture
   extern CTexParams _tpPattern;
@@ -854,8 +854,6 @@ void SvkMain::StartFrame()
 
   PrepareDescriptorSets(gl_VkCmdBufferCurrent);
 
-  _no_ulTextureDescSet = GetTextureDescriptor(_no_ulTexture);
-
   VkCommandBufferBeginInfo beginInfo = {};
   beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
   beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -968,51 +966,55 @@ void SvkMain::DrawTriangles(uint32_t indexCount, const uint32_t *indices)
   memcpy(vertexBuffer.sdb_Data, &verts[0], vertsSize);
   memcpy(indexBuffer.sdb_Data, indices, indicesSize);
 
-  // if previously not bound or flags don't match then bind new pipeline
-  if (gl_VkPreviousPipeline == nullptr || (gl_VkPreviousPipeline != nullptr && gl_VkPreviousPipeline->sps_Flags != gl_VkGlobalState))
-  {
-    // bind pipeline
-    SvkPipelineState &ps = GetPipeline(gl_VkGlobalState);
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ps.sps_Pipeline);
-    // save as it's most likely that next will be same
-    gl_VkPreviousPipeline = &ps;
-  }
-
   VkDescriptorSet sets[4] = {};
+  uint32_t textureCount = 0;
+
   float textureColorScale = 1.0f;
 
-  // bind texture descriptors
+  // get texture descriptors
   for (uint32_t i = 0; i < GFX_MAXTEXUNITS; i++)
   {
     if (GFX_abTexture[i])
     {
       VkDescriptorSet textureDescSet = GetTextureDescriptor(gl_VkActiveTextures[i]);
-     
+
       if (textureDescSet != VK_NULL_HANDLE)
       {
-        sets[i] = textureDescSet;
+        sets[textureCount] = textureDescSet;
+        textureCount++;
 
         ASSERT(GFX_iTexModulation[i] == 1 || GFX_iTexModulation[i] == 2);
         textureColorScale *= GFX_iTexModulation[i];
-        continue;
       }
     }
-
-    sets[i] = _no_ulTextureDescSet;
   }
 
-  // set textures
-  vkCmdBindDescriptorSets(
-    cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gl_VkPipelineLayout,
-    0, 4, sets,
-    0, nullptr);
+  // if previously not bound or flags don't match then bind new pipeline
+  if (gl_VkPreviousPipeline == nullptr ||
+    (gl_VkPreviousPipeline != nullptr && !(gl_VkPreviousPipeline->sps_Flags == gl_VkGlobalState && gl_VkPreviousPipeline->sps_TextureCount == textureCount)))
+  {
+    // bind pipeline
+    SvkPipelineState &ps = GetPipeline(gl_VkGlobalState, textureCount);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ps.sps_Pipeline);
+    // save as it's most likely that next will be same
+    gl_VkPreviousPipeline = &ps;
+  }
+
+  if (textureCount > 0)
+  {
+    // set textures
+    vkCmdBindDescriptorSets(
+      cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gl_VkPipelineLayouts[textureCount],
+      0, textureCount, sets,
+      0, nullptr);
+  }
 
   // set tranformation matrix
-  vkCmdPushConstants(cmd, gl_VkPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+  vkCmdPushConstants(cmd, gl_VkPipelineLayouts[textureCount], VK_SHADER_STAGE_VERTEX_BIT,
     0, 16 * sizeof(float), mvp);
 
   // set texture color scales
-  vkCmdPushConstants(cmd, gl_VkPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 
+  vkCmdPushConstants(cmd, gl_VkPipelineLayouts[textureCount], VK_SHADER_STAGE_FRAGMENT_BIT,
     16 * sizeof(float), sizeof(float), &textureColorScale);
 
   // set mesh
